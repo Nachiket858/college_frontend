@@ -56,8 +56,8 @@
       border-radius: 0.75rem;
       border: 1px solid #e5e7eb;
     }
-    /* Comedy Loader Styles */
-    .comedy-loader {
+    /* Loader Styles */
+    .text-loader {
       position: absolute;
       top: 0;
       left: 0;
@@ -70,10 +70,6 @@
       background-color: rgba(243, 244, 246, 0.8);
       z-index: 10;
     }
-    .loader-emoji {
-      font-size: 3rem;
-      animation: bounce 0.6s infinite alternate;
-    }
     .loader-text {
       margin-top: 1rem;
       font-size: 1rem;
@@ -81,19 +77,19 @@
       text-align: center;
       padding: 0 1rem;
     }
-    @keyframes bounce {
-      0% { transform: translateY(0) rotate(-5deg); }
-      100% { transform: translateY(-15px) rotate(5deg); }
+    .dot-animation {
+      display: inline-block;
+      width: 1em;
+      text-align: left;
     }
-    .running-man {
-      position: absolute;
-      bottom: 10px;
-      font-size: 1.5rem;
-      animation: run 3s linear infinite;
+    .dot-animation::after {
+      content: '...';
+      animation: dots 1.5s steps(3, end) infinite;
     }
-    @keyframes run {
-      0% { left: -50px; }
-      100% { left: calc(100% + 50px); }
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
     }
   </style>
 </head>
@@ -184,24 +180,32 @@
     let postsData = [];
     let isFormExpanded = false;
 
-    // Comedy loader messages
+    // Loading messages
     const loaderMessages = [
-      "Brewing the campus tea...",
-      "Asking WiFi to cooperate...",
-      "Distracting the dean...",
-      "Checking if this is NSFW...",
-      "Adding dramatic music...",
-      "Making sure your crush doesn't see this...",
-      "Applying 100% anonymity...",
-      "Convincing the server to spill the tea...",
-      "Hiding from professors...",
-      "Loading... (like your crush loads excuses)"
+      "Loading content, please wait",
+      "Fetching posts from server",
+      "Processing your request",
+      "Almost there, loading data",
+      "Preparing content for you"
     ];
 
-    // Comedy loader emojis
-    const loaderEmojis = ['🕵️', '🐌', '🍵', '👀', '🤔', '📸', '🙈', '🔍', '🤫', '👁️'];
+    function createTextLoader() {
+      const loader = document.createElement('div');
+      loader.className = 'text-loader';
+      
+      const randomMessage = loaderMessages[Math.floor(Math.random() * loaderMessages.length)];
+      
+      loader.innerHTML = `
+        <p class="loader-text">${randomMessage}<span class="dot-animation"></span></p>
+      `;
+      
+      return loader;
+    }
 
     async function fetchPosts() {
+      const loader = createTextLoader();
+      document.getElementById('posts').appendChild(loader);
+      
       try {
         const res = await fetch('https://timepass-project-v59d.onrender.com/api/posts/');
         postsData = await res.json();
@@ -209,23 +213,9 @@
         document.getElementById('emptyState').classList.toggle('hidden', postsData.length > 0);
       } catch (error) {
         console.error("Failed to fetch posts:", error);
+      } finally {
+        loader.remove();
       }
-    }
-
-    function createComedyLoader() {
-      const loader = document.createElement('div');
-      loader.className = 'comedy-loader';
-      
-      const randomEmoji = loaderEmojis[Math.floor(Math.random() * loaderEmojis.length)];
-      const randomMessage = loaderMessages[Math.floor(Math.random() * loaderMessages.length)];
-      
-      loader.innerHTML = `
-        <div class="loader-emoji">${randomEmoji}</div>
-        <p class="loader-text">${randomMessage}</p>
-        <div class="running-man">${randomEmoji === '🐌' ? '🐌' : '🏃‍♂️'}</div>
-      `;
-      
-      return loader;
     }
 
     function showPost(index) {
@@ -247,8 +237,8 @@
         const imgContainer = document.createElement('div');
         imgContainer.className = 'image-container';
         
-        // Add comedy loader
-        const loader = createComedyLoader();
+        // Add text loader
+        const loader = createTextLoader();
         imgContainer.appendChild(loader);
         
         // Create image element
@@ -265,8 +255,7 @@
         
         imgEl.onerror = function() {
           loader.innerHTML = `
-            <div class="loader-emoji">🤦‍♂️</div>
-            <p class="loader-text">Even the image wants to remain anonymous!</p>
+            <p class="loader-text">Failed to load image. Please try again later.</p>
           `;
         };
         
@@ -466,6 +455,3 @@
   </script>
 </body>
 </html>
-
-
-

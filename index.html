@@ -56,6 +56,28 @@
       border-radius: 0.75rem;
       border: 1px solid #e5e7eb;
     }
+    .lazy-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .lazy-image.loaded {
+      opacity: 1;
+    }
+    .image-placeholder {
+      width: 100%;
+      height: 100%;
+      background-color: #e5e7eb;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #9ca3af;
+    }
     /* Loader Styles */
     .text-loader {
       position: absolute;
@@ -179,6 +201,40 @@
     let currentPostIndex = 0;
     let postsData = [];
     let isFormExpanded = false;
+    let currentPage = 1;
+    let isLoading = false;
+    let hasMorePosts = true;
+
+    // Client-side cache
+    const postCache = {
+      data: [],
+      lastUpdated: null,
+      
+      async getPosts(page = 1) {
+        // Return cached data if it's fresh (less than 5 minutes old)
+        if (this.lastUpdated && Date.now() - this.lastUpdated < 300000 && page === 1) {
+          return this.data;
+        }
+        
+        try {
+          const res = await fetch(`https://timepass-project-v59d.onrender.com/api/posts?page=${page}&limit=5`);
+          const newPosts = await res.json();
+          
+          if (page === 1) {
+            this.data = newPosts;
+          } else {
+            this.data = [...this.data, ...newPosts];
+          }
+          
+          this.lastUpdated = Date.now();
+          hasMorePosts = newPosts.length > 0;
+          return this.data;
+        } catch (error) {
+          console.error("Failed to fetch posts:", error);
+          return this.data.length > 0 ? this.data : [];
+        }
+      }
+    };
 
     // Loading messages
     const loaderMessages = [
@@ -202,18 +258,27 @@
       return loader;
     }
 
-    async function fetchPosts() {
+    async function fetchPosts(page = 1) {
+      if (isLoading) return;
+      isLoading = true;
+      
       const loader = createTextLoader();
       document.getElementById('posts').appendChild(loader);
       
       try {
-        const res = await fetch('https://timepass-project-v59d.onrender.com/api/posts/');
-        postsData = await res.json();
-        showPost(currentPostIndex);
-        document.getElementById('emptyState').classList.toggle('hidden', postsData.length > 0);
+        postsData = await postCache.getPosts(page);
+        currentPage = page;
+        
+        if (postsData.length > 0) {
+          showPost(currentPostIndex);
+          document.getElementById('emptyState').classList.add('hidden');
+        } else {
+          document.getElementById('emptyState').classList.remove('hidden');
+        }
       } catch (error) {
         console.error("Failed to fetch posts:", error);
       } finally {
+        isLoading = false;
         loader.remove();
       }
     }
@@ -226,8 +291,18 @@
         return;
       }
 
-      if (index >= postsData.length) currentPostIndex = 0;
-      if (index < 0) currentPostIndex = postsData.length - 1;
+      if (index >= postsData.length) {
+        if (hasMorePosts) {
+          fetchPosts(currentPage + 1);
+          return;
+        } else {
+          currentPostIndex = 0;
+        }
+      }
+      
+      if (index < 0) {
+        currentPostIndex = postsData.length - 1;
+      }
 
       const post = postsData[currentPostIndex];
       const card = document.createElement('div');
@@ -237,28 +312,38 @@
         const imgContainer = document.createElement('div');
         imgContainer.className = 'image-container';
         
-        // Add text loader
-        const loader = createTextLoader();
-        imgContainer.appendChild(loader);
+        // Add placeholder
+        const placeholder = document.createElement('div');
+        placeholder.className = 'image-placeholder';
+        placeholder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>';
+        imgContainer.appendChild(placeholder);
         
-        // Create image element
+        // Create lazy-loaded image element
         const imgEl = document.createElement('img');
-        imgEl.src = post.image;
+        imgEl.dataset.src = post.image;
         imgEl.alt = "Campus evidence";
-        imgEl.className = 'post-image';
-        imgEl.style.display = 'none'; // Hide initially
+        imgEl.className = 'lazy-image';
         
-        imgEl.onload = function() {
-          loader.remove();
-          imgEl.style.display = 'block';
-        };
+        // Only load when visible
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              const lazyImage = entry.target;
+              lazyImage.src = lazyImage.dataset.src;
+              
+              lazyImage.onload = function() {
+                lazyImage.classList.add('loaded');
+                placeholder.remove();
+              };
+              
+              observer.unobserve(lazyImage);
+            }
+          });
+        }, {
+          rootMargin: '200px' // Start loading when 200px away
+        });
         
-        imgEl.onerror = function() {
-          loader.innerHTML = `
-            <p class="loader-text">Failed to load image. Please try again later.</p>
-          `;
-        };
-        
+        observer.observe(imgEl);
         imgContainer.appendChild(imgEl);
         
         // Add funny emoji overlay
@@ -357,7 +442,9 @@
           textInput.value = '';
           textarea.value = '';
           
-          fetchPosts();
+          // Clear cache and reload first page
+          postCache.data = [];
+          fetchPosts(1);
           
           // Collapse form
           document.getElementById('uploadContainer').classList.remove('expanded-upload');
@@ -390,7 +477,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      fetchPosts();
+      fetchPosts(1);
       
       // Event listeners
       document.getElementById('uploadForm').addEventListener('submit', handleSubmit);
@@ -429,12 +516,19 @@
       
       document.getElementById('imageUpload').addEventListener('change', function(e) {
         if (this.files && this.files[0]) {
+          const file = this.files[0];
+          if (file.size > 1024 * 1024) { // 1MB limit
+            alert("Image is too large. Please select an image under 1MB.");
+            this.value = '';
+            return;
+          }
+          
           const reader = new FileReader();
           reader.onload = function(e) {
             document.getElementById('previewImage').src = e.target.result;
             document.getElementById('imagePreview').classList.remove('hidden');
           }
-          reader.readAsDataURL(this.files[0]);
+          reader.readAsDataURL(file);
           
           document.getElementById('uploadContainer').classList.remove('compact-upload');
           document.getElementById('uploadContainer').classList.add('expanded-upload');

@@ -62,7 +62,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain; /* Changed from cover to contain */
       opacity: 0;
       transition: opacity 0.3s ease;
     }
@@ -323,6 +323,7 @@
         imgEl.dataset.src = post.image;
         imgEl.alt = "Campus evidence";
         imgEl.className = 'lazy-image';
+        imgEl.style.maxHeight = '400px'; // Add a fixed max height
         
         // Only load when visible
         const observer = new IntersectionObserver((entries) => {
